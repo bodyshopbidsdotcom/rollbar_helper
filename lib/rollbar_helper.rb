@@ -1,5 +1,5 @@
 class RollbarHelper
-  VERSION = "0.0.2"
+  VERSION = "0.0.3"
 
   class << self
 
@@ -17,6 +17,12 @@ class RollbarHelper
         Rollbar.scope(:fingerprint => fingerprint).error(e)
       else
         Rollbar.error(e)
+      end
+    end
+
+    def configure
+      Rollbar.configure do |config|
+        yield(config)
       end
     end
 
