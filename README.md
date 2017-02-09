@@ -1,8 +1,8 @@
 # RollbarHelper
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/rollbar_helper`. To experiment with that code, run `bin/console` for an interactive prompt.
+When you call `Rollbar.error('description')`, rollbar doesn't provide a stacktrace, just the "description" error. To find exactly where this error was generated, one has to search the entire codebase for `"description"`.
 
-TODO: Delete this and the text above, and describe your gem
+This gem allows you to call `RollbarHelper.error('description')` and get a stacktrace on https://rollbar.com pointing where in the code it was exactly generated.
 
 ## Installation
 
@@ -22,7 +22,14 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+Keep your `gem 'rollbar'` dependency and your rollbar configuration.
+
+Instead of calling `Rollbar.error(...)`, call
+```ruby
+RollbarHelper.error(...)
+```
+
+`...` could be a string or an Exception
 
 ## Development
 
@@ -32,7 +39,7 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/santi-h/rollbar_helper. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+Bug reports and pull requests are welcome on GitHub at https://github.com/bodyshopbidsdotcom/rollbar_helper. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
 
 
 ## License
