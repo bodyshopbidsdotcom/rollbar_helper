@@ -1,9 +1,9 @@
 class RollbarHelper
-  VERSION = "0.1.0"
+  VERSION = "0.2.0"
 
   class << self
 
-    def error(obj, extra = {}, fingerprint: nil)
+    def error(obj, fingerprint: nil, **data)
       e = nil
 
       if obj.is_a?(Exception)
@@ -14,9 +14,9 @@ class RollbarHelper
       end
 
       if fingerprint.present?
-        Rollbar.scope(:fingerprint => fingerprint).error(e, **extra)
+        Rollbar.scope(:fingerprint => fingerprint).error(e, data)
       else
-        Rollbar.error(e, **extra)
+        Rollbar.error(e, data)
       end
     end
 
