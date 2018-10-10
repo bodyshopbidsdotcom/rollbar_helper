@@ -1,7 +1,7 @@
 require 'rollbar'
+require 'rollbar_helper/version'
 
-class RollbarHelper
-  VERSION = "0.2.0"
+module RollbarHelper
   LEVELS = [
     :critical,
     :debug,
