@@ -11,6 +11,7 @@ RSpec.describe RollbarHelper do
 
   before(:each) do
     allow_any_instance_of(Rollbar::Notifier).to receive(:enabled?).and_return(true)
+    allow_any_instance_of(Rollbar::Configuration).to receive(:transmit).and_return(false)
   end
 
 
@@ -53,10 +54,10 @@ RSpec.describe RollbarHelper do
   end
 
   it 'scopes with fingerprint' do
-    expect(Rollbar).to receive(:scope).with(:fingerprint => 'processor').and_call_original
+    expect(Rollbar).to receive(:scope).with(fingerprint: 'processor').and_call_original
     expect_any_instance_of(Rollbar::Notifier).to receive(:error).with(nil, caller_backtrace(__FILE__), data).and_call_original
     expect_any_instance_of(Rollbar::Item).to receive(:build_backtrace_body).and_call_original
-    RollbarHelper.error('Oops!', data, :fingerprint => 'processor')
+    RollbarHelper.error('Oops!', data, fingerprint: 'processor')
   end
 
   describe '#log' do

@@ -14,7 +14,7 @@ module RollbarHelper
     LEVELS.each do |level|
       define_method(level) do |*args|
         message, exception, extra = extract_arguments(args)
-        extra = {callee: caller}.merge(extra)
+        extra = { callee: caller }.merge(extra)
         data, exception, callee, fingerprint = split_extra_arg(extra, exception)
 
         if !message.nil? && exception.nil?
@@ -30,7 +30,7 @@ module RollbarHelper
 
     def log(level, *args)
       raise ArgumentError, 'Log level is not supported' unless LEVELS.include?(level.to_sym)
-      send(level, {callee: caller}, *args)
+      send(level, { callee: caller }, *args)
     end
 
     private
