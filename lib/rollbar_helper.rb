@@ -3,55 +3,65 @@ require 'rollbar_helper/version'
 
 module RollbarHelper
   LEVELS = [
-    :critical,
     :debug,
-    :error,
     :info,
     :warning,
-  ]
+    :error,
+    :critical,
+  ].freeze
 
   class << self
-    def critical(obj, fingerprint: nil, **data)
-      log(:critical, obj, :callee => caller, fingerprint: fingerprint, **data)
+    LEVELS.each do |level|
+      define_method(level) do |*args|
+        message, exception, extra = extract_arguments(args)
+        extra = { callee: caller }.merge(extra)
+        data, exception, callee, fingerprint = split_extra_arg(extra, exception)
+
+        if !message.nil? && exception.nil?
+          exception = StandardError.new(message).tap do |e|
+            e.set_backtrace(callee)
+          end
+          message = nil
+        end
+
+        get_notifier(fingerprint).public_send(level, message, exception, data)
+      end
     end
 
-    def debug(obj, fingerprint: nil, **data)
-      log(:debug, obj, :callee => caller, fingerprint: fingerprint, **data)
+    def log(level, *args)
+      raise ArgumentError, 'Log level is not supported' unless LEVELS.include?(level.to_sym)
+      send(level, { callee: caller }, *args)
     end
 
-    def error(obj, fingerprint: nil, **data)
-      log(:error, obj, :callee => caller, fingerprint: fingerprint, **data)
-    end
+    private
 
-    def info(obj, fingerprint: nil, **data)
-      log(:info, obj, :callee => caller, fingerprint: fingerprint, **data)
-    end
+    def extract_arguments(args)
+      message = exception = nil
+      extra = {}
 
-    def warn(obj, fingerprint: nil, **data)
-      log(:warning, obj, :callee => caller, fingerprint: fingerprint, **data)
-    end
-
-    def warning(obj, fingerprint: nil, **data)
-      log(:warning, obj, :callee => caller, fingerprint: fingerprint, **data)
-    end
-
-    def log(level, obj, callee: caller, fingerprint: nil, **data)
-      level = level.to_sym
-      raise ArgumentError, 'Log level is not supported' unless LEVELS.include?(level)
-      e = nil
-
-      if obj.is_a?(Exception)
-        e = obj
-      else
-        e = StandardError.new(obj.to_s)
-        e.set_backtrace(callee)
+      args.each do |arg|
+        if arg.is_a?(String)
+          message = arg
+        elsif arg.is_a?(Exception)
+          exception = arg
+        elsif arg.is_a?(Hash)
+          extra = extra.merge(arg)
+        end
       end
 
-      unless fingerprint.nil?
-        ::Rollbar.scope(:fingerprint => fingerprint).send(level, e, data)
-      else
-        ::Rollbar.send(level, e, data)
-      end
+      [message, exception, extra]
+    end
+
+    def split_extra_arg(extra, exception)
+      exception ||= extra.delete(:e) # Core legacy support
+      callee = extra.delete(:callee)
+      fingerprint = extra.delete(:fingerprint)
+      [extra, exception, callee, fingerprint]
+    end
+
+    def get_notifier(fingerprint)
+      return Rollbar if fingerprint.nil?
+      Rollbar.scope(fingerprint: fingerprint)
     end
   end
 end
