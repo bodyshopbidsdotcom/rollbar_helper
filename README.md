@@ -31,7 +31,7 @@ RollbarHelper.error(*args)
 `args` will be an array that can include a mix of:
 - a String for the message to show
 - an Exception
-- an hash for extra params to be sent to Rollbar, including:
+- a hash for extra params to be sent to Rollbar, including:
   - `:fingerprint` for grouping
   - `:e` for providing an Exception (to not break legacy code)
 
