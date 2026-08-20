@@ -10,12 +10,30 @@ module RollbarHelper
     :critical,
   ].freeze
 
+  LEVELS_TO_LOGGER = {
+    debug: :debug,
+    info: :info,
+    warning: :warn,
+    error: :error,
+    critical: :fatal
+  }.freeze
+
   class << self
+    attr_accessor :logger
+
     LEVELS.each do |level|
       define_method(level) do |*args|
         message, exception, extra = extract_arguments(args)
         extra = { callee: caller }.merge(extra)
         data, exception, callee, fingerprint = split_extra_arg(extra, exception)
+
+        if logger?
+          method_name = LEVELS_TO_LOGGER[level.to_sym]
+          msg = [message]
+          msg << "An error occurred: #{exception.message}\n#{exception.backtrace.join("\n")}" unless exception.nil?
+          msg << extra.to_s if !extra.nil? && !extra&.empty? && extra.respond_to?(:to_s)
+          logger.send(method_name, msg.compact.join("\n").strip)
+        end
 
         if !message.nil? && exception.nil?
           exception = StandardError.new(message).tap do |e|
@@ -31,6 +49,10 @@ module RollbarHelper
     def log(level, *args)
       raise ArgumentError, 'Log level is not supported' unless LEVELS.include?(level.to_sym)
       send(level, { callee: caller }, *args)
+    end
+
+    def logger?
+      !@logger.nil?
     end
 
     private
