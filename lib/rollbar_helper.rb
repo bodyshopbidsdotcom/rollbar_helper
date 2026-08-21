@@ -27,13 +27,7 @@ module RollbarHelper
         extra = { callee: caller }.merge(extra)
         data, exception, callee, fingerprint = split_extra_arg(extra, exception)
 
-        if logger?
-          method_name = LEVELS_TO_LOGGER[level.to_sym]
-          msg = [message]
-          msg << "An error occurred: #{exception.message}\n#{exception.backtrace.join("\n")}" unless exception.nil?
-          msg << extra.to_s if !extra.nil? && !extra&.empty? && extra.respond_to?(:to_s)
-          logger.send(method_name, msg.compact.join("\n").strip)
-        end
+        log_to_logger(level, message, exception, data) if logger?
 
         if !message.nil? && exception.nil?
           exception = StandardError.new(message).tap do |e|
@@ -52,10 +46,28 @@ module RollbarHelper
     end
 
     def logger?
-      !@logger.nil?
+      !logger.nil?
     end
 
     private
+
+    def log_to_logger(level, message, exception, extra)
+      method_name = LEVELS_TO_LOGGER[level]
+      msg = [message]
+      unless exception.nil?
+        backtrace = exception.backtrace&.join("\n") || 'no backtrace available'
+        msg << "An error occurred: #{exception.message}\n#{backtrace}"
+      end
+      msg << "Extra: #{extra}" unless extra.empty?
+      logger.send(method_name, msg.compact.join("\n").strip)
+    rescue StandardError => e
+      # Logging failures must never prevent the underlying Rollbar report.
+      begin
+        logger&.error("RollbarHelper failed to log: #{e.message}")
+      rescue StandardError
+        nil
+      end
+    end
 
     def extract_arguments(args)
       message = exception = nil
