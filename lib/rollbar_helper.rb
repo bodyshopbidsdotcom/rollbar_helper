@@ -10,12 +10,22 @@ module RollbarHelper
     :critical,
   ].freeze
 
+  LEVELS_TO_LOGGER = {
+    debug: :debug,
+    info: :info,
+    warning: :warn,
+    error: :error,
+    critical: :fatal
+  }.freeze
+
   class << self
     LEVELS.each do |level|
       define_method(level) do |*args|
         message, exception, extra = extract_arguments(args)
         extra = { callee: caller }.merge(extra)
         data, exception, callee, fingerprint = split_extra_arg(extra, exception)
+
+        call_custom_log(level, message, exception, callee, data) if custom_log?
 
         if !message.nil? && exception.nil?
           exception = StandardError.new(message).tap do |e|
@@ -33,7 +43,31 @@ module RollbarHelper
       send(level, { callee: caller }, *args)
     end
 
+    # Registers a block called on every report, before it is sent to Rollbar.
+    # Calling it without a block removes the hook.
+    def custom_log(&block)
+      @custom_log = block
+    end
+
+    def custom_log?
+      !@custom_log.nil?
+    end
+
     private
+
+    def call_custom_log(level, message, exception, callee, extra)
+      @custom_log.call(
+        loglevel: level,
+        message: message,
+        exception: exception,
+        backtrace: exception&.backtrace || callee,
+        extra: extra.dup
+      )
+    rescue StandardError => e
+      # Logging failures must never prevent the underlying Rollbar report.
+      # $stderr directly, since Kernel#warn is silent when $VERBOSE is nil.
+      $stderr.puts("RollbarHelper custom_log failed to log: #{e.class}: #{e.message}")
+    end
 
     def extract_arguments(args)
       message = exception = nil

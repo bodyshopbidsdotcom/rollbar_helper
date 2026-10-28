@@ -46,6 +46,31 @@ RollbarHelper.error(
 
 ℹ️ Rollbar allows receiving the args in any given order and it will ignore when an arg not a String, Hash or Exception.
 
+### Logging
+
+To also log every report locally, register a `custom_log` hook. It is called before the report is sent to Rollbar:
+```ruby
+RollbarHelper.custom_log do |loglevel:, message:, exception:, backtrace:, extra:|
+  puts "#{loglevel}: #{message}"
+end
+```
+
+- `loglevel` is the Rollbar level (`:debug`, `:info`, `:warning`, `:error`, `:critical`). `RollbarHelper::LEVELS_TO_LOGGER` maps these to `Logger` methods.
+- `backtrace` is the exception's backtrace, or the caller's backtrace when no exception was given.
+- `extra` is the extra hash, without `:fingerprint`.
+
+Accept `**` in the block if you don't need every keyword. An exception raised by the hook is printed to stderr and the Rollbar report still goes out. Call `RollbarHelper.custom_log` without a block to remove the hook.
+
+To write to a `Logger`, such as `Rails.logger`:
+```ruby
+RollbarHelper.custom_log do |loglevel:, message:, exception:, **|
+  Rails.logger.public_send(
+    RollbarHelper::LEVELS_TO_LOGGER[loglevel],
+    [message, exception&.full_message].compact.join("\n")
+  )
+end
+```
+
 ## Development
 
 ### Setup

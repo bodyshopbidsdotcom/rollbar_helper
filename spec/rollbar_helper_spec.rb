@@ -73,4 +73,57 @@ RSpec.describe RollbarHelper do
       }.to raise_error(ArgumentError, 'Log level is not supported')
     end
   end
+
+  describe '#custom_log' do
+    let(:calls) { [] }
+
+    before(:each) do
+      RollbarHelper.custom_log do |loglevel:, message:, exception:, backtrace:, extra:|
+        calls << { loglevel: loglevel, message: message, exception: exception, backtrace: backtrace, extra: extra }
+      end
+    end
+
+    after(:each) { RollbarHelper.custom_log }
+
+    it 'is not configured by default' do
+      RollbarHelper.custom_log
+      expect(RollbarHelper.custom_log?).to eq(false)
+    end
+
+    RollbarHelper::LEVELS.each do |level|
+      it "is called for ##{level} with the Rollbar level" do
+        RollbarHelper.public_send(level, 'Oops!', data)
+        expect(calls.first).to include(loglevel: level, message: 'Oops!', exception: nil, extra: data)
+      end
+    end
+
+    it "passes the caller's backtrace when there is no exception" do
+      RollbarHelper.error('Oops!', data)
+      expect(calls.first[:backtrace][0]).to include(__FILE__)
+    end
+
+    it "passes the exception and its backtrace when present" do
+      exception = StandardError.new('Boom')
+      exception.set_backtrace(['line 1', 'line 2'])
+      RollbarHelper.error('Oops!', exception, data)
+      expect(calls.first).to include(exception: exception, backtrace: ['line 1', 'line 2'])
+    end
+
+    it 'does not pass fingerprint or callee in extra' do
+      RollbarHelper.error('Oops!', data, fingerprint: 'processor')
+      expect(calls.first[:extra]).to eq(data)
+    end
+
+    it 'cannot alter the data sent to Rollbar' do
+      RollbarHelper.custom_log { |extra:, **| extra[:injected] = true }
+      expect(Rollbar).to receive(:error).with(nil, instance_of(StandardError), data).and_call_original
+      RollbarHelper.error('Oops!', data)
+    end
+
+    it 'still reports to Rollbar even if the hook raises' do
+      RollbarHelper.custom_log { |**| raise 'hook exploded' }
+      expect(Rollbar).to receive(:error).with(nil, instance_of(StandardError), data).and_call_original
+      expect { RollbarHelper.error('Oops!', data) }.to output(/hook exploded/).to_stderr
+    end
+  end
 end
