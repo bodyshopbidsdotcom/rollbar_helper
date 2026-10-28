@@ -19,15 +19,13 @@ module RollbarHelper
   }.freeze
 
   class << self
-    attr_accessor :logger
-
     LEVELS.each do |level|
       define_method(level) do |*args|
         message, exception, extra = extract_arguments(args)
         extra = { callee: caller }.merge(extra)
         data, exception, callee, fingerprint = split_extra_arg(extra, exception)
 
-        log_to_logger(level, message, exception, data) if logger?
+        call_custom_log(level, message, exception, callee, data) if custom_log?
 
         if !message.nil? && exception.nil?
           exception = StandardError.new(message).tap do |e|
@@ -45,28 +43,30 @@ module RollbarHelper
       send(level, { callee: caller }, *args)
     end
 
-    def logger?
-      !logger.nil?
+    # Registers a block called on every report, before it is sent to Rollbar.
+    # Calling it without a block removes the hook.
+    def custom_log(&block)
+      @custom_log = block
+    end
+
+    def custom_log?
+      !@custom_log.nil?
     end
 
     private
 
-    def log_to_logger(level, message, exception, extra)
-      method_name = LEVELS_TO_LOGGER[level]
-      msg = [message]
-      unless exception.nil?
-        backtrace = exception.backtrace&.join("\n") || 'no backtrace available'
-        msg << "An error occurred: #{exception.message}\n#{backtrace}"
-      end
-      msg << "Extra: #{extra}" unless extra.empty?
-      logger.send(method_name, msg.compact.join("\n").strip)
+    def call_custom_log(level, message, exception, callee, extra)
+      @custom_log.call(
+        loglevel: level,
+        message: message,
+        exception: exception,
+        backtrace: exception&.backtrace || callee,
+        extra: extra.dup
+      )
     rescue StandardError => e
       # Logging failures must never prevent the underlying Rollbar report.
-      begin
-        logger&.error("RollbarHelper failed to log: #{e.message}")
-      rescue StandardError
-        nil
-      end
+      # $stderr directly, since Kernel#warn is silent when $VERBOSE is nil.
+      $stderr.puts("RollbarHelper custom_log failed to log: #{e.class}: #{e.message}")
     end
 
     def extract_arguments(args)

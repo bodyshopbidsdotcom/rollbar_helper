@@ -74,90 +74,56 @@ RSpec.describe RollbarHelper do
     end
   end
 
-  describe '#logger' do
-    let(:logger) { double('Logger', debug: nil, info: nil, warn: nil, error: nil, fatal: nil) }
+  describe '#custom_log' do
+    let(:calls) { [] }
 
-    after(:each) { RollbarHelper.logger = nil }
-
-    it 'is nil by default' do
-      expect(RollbarHelper.logger).to be_nil
-      expect(RollbarHelper.logger?).to eq(false)
-    end
-
-    it 'is used when configured' do
-      RollbarHelper.logger = logger
-      expect(RollbarHelper.logger?).to eq(true)
-    end
-
-    levels_to_logger = {
-      debug: :debug,
-      info: :info,
-      warning: :warn,
-      error: :error,
-      critical: :fatal
-    }
-
-    levels_to_logger.each do |level, logger_method|
-      it "forwards ##{level} to the logger's ##{logger_method}" do
-        RollbarHelper.logger = logger
-        expect(logger).to receive(logger_method).with(a_string_including('Oops!'))
-        RollbarHelper.public_send(level, 'Oops!', data)
+    before(:each) do
+      RollbarHelper.custom_log do |loglevel:, message:, exception:, backtrace:, extra:|
+        calls << { loglevel: loglevel, message: message, exception: exception, backtrace: backtrace, extra: extra }
       end
     end
 
-    it 'includes the exception message and backtrace when present' do
-      RollbarHelper.logger = logger
+    after(:each) { RollbarHelper.custom_log }
+
+    it 'is not configured by default' do
+      RollbarHelper.custom_log
+      expect(RollbarHelper.custom_log?).to eq(false)
+    end
+
+    RollbarHelper::LEVELS.each do |level|
+      it "is called for ##{level} with the Rollbar level" do
+        RollbarHelper.public_send(level, 'Oops!', data)
+        expect(calls.first).to include(loglevel: level, message: 'Oops!', exception: nil, extra: data)
+      end
+    end
+
+    it "passes the caller's backtrace when there is no exception" do
+      RollbarHelper.error('Oops!', data)
+      expect(calls.first[:backtrace][0]).to include(__FILE__)
+    end
+
+    it "passes the exception and its backtrace when present" do
       exception = StandardError.new('Boom')
       exception.set_backtrace(['line 1', 'line 2'])
-
-      expect(logger).to receive(:error) do |msg|
-        expect(msg).to include('Oops!')
-        expect(msg).to include('An error occurred: Boom')
-        expect(msg).to include("line 1\nline 2")
-      end
-
       RollbarHelper.error('Oops!', exception, data)
+      expect(calls.first).to include(exception: exception, backtrace: ['line 1', 'line 2'])
     end
 
-    it 'does not blow up when the exception has no backtrace' do
-      RollbarHelper.logger = logger
-      exception = StandardError.new('Boom')
-
-      expect(logger).to receive(:error) do |msg|
-        expect(msg).to include('no backtrace available')
-      end
-
-      expect { RollbarHelper.error('Oops!', exception, data) }.not_to raise_error
+    it 'does not pass fingerprint or callee in extra' do
+      RollbarHelper.error('Oops!', data, fingerprint: 'processor')
+      expect(calls.first[:extra]).to eq(data)
     end
 
-    it 'includes extra data when present' do
-      RollbarHelper.logger = logger
-      expect(logger).to receive(:error).with(a_string_including('Extra:'))
+    it 'cannot alter the data sent to Rollbar' do
+      RollbarHelper.custom_log { |extra:, **| extra[:injected] = true }
+      expect(Rollbar).to receive(:error).with(nil, instance_of(StandardError), data).and_call_original
       RollbarHelper.error('Oops!', data)
     end
 
-    it 'omits the extra section when there is no extra data' do
-      RollbarHelper.logger = logger
-      expect(logger).to receive(:error) do |msg|
-        expect(msg).not_to include('Extra:')
-      end
-      RollbarHelper.error('Oops!')
-    end
-
-    it 'still reports to Rollbar even if the logger call raises' do
-      RollbarHelper.logger = logger
-      allow(logger).to receive(:error).and_raise(StandardError.new('logger exploded'))
-
+    it 'still reports to Rollbar even if the hook raises' do
+      RollbarHelper.custom_log { |**| raise 'hook exploded' }
       expect(Rollbar).to receive(:error).with(nil, instance_of(StandardError), data).and_call_original
-      expect_any_instance_of(Rollbar::Item).to receive(:build_backtrace_body).and_call_original
-
-      expect { RollbarHelper.error('Oops!', data) }.not_to raise_error
-    end
-
-    it 'does not call the logger when none is configured' do
-      expect(Rollbar).to receive(:error).and_call_original
-      expect_any_instance_of(Rollbar::Item).to receive(:build_backtrace_body).and_call_original
-      expect { RollbarHelper.error('Oops!', data) }.not_to raise_error
+      expect { RollbarHelper.error('Oops!', data) }.to output(/hook exploded/).to_stderr
     end
   end
 end
